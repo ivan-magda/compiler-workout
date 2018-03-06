@@ -53,4 +53,13 @@ let run i p = let (_, (_, _, o)) = eval ([], (Syntax.Expr.empty, i, [])) p in o
    stack machine
  *)
 
-let compile _ = failwith "Not yet implemented"
+let rec compileExpr = function
+	| Const x -> [CONST x]
+	| Var z -> [LD z]
+	| Binop (op, lhs, rhs) -> compileExpr lhs @ compileExpr rhs @ [BINOP op]
+
+let rec compile = function
+    | Read z -> [READ; ST z]
+	| Write e -> compileExpr e @ [WRITE]
+	| Assign (z, e) -> compileExpr e @ [ST z]
+	| Seq (z, e)  -> compile z @ compile e
