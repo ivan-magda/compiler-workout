@@ -34,6 +34,25 @@ module Expr =
     *)
     let update x v s = fun y -> if x = y then v else s y
 
+    let binop op lhs rhs = 
+      let intToBool value = if value = 0 then false else true
+      and boolToInt value = if value then 1 else 0
+      in match op with
+      	| "+" -> lhs + rhs
+        | "-" -> lhs - rhs
+        | "*" -> lhs * rhs
+        | "/" -> lhs / rhs
+        | "%" -> lhs mod rhs
+        | ">" -> boolToInt (lhs > rhs)
+        | "<" -> boolToInt (lhs < rhs)
+        | ">=" -> boolToInt (lhs >= rhs)
+        | "<=" -> boolToInt (lhs <= rhs)
+        | "==" -> boolToInt (lhs = rhs)
+        | "!=" -> boolToInt (lhs <> rhs)
+        | "!!" -> boolToInt ((intToBool lhs) || (intToBool rhs))
+        | "&&" -> boolToInt ((intToBool lhs) && (intToBool rhs))
+        | _ -> failwith @@ Printf.sprintf "Unknown operator %s" op
+
     (* Expression evaluator
 
           val eval : state -> t -> int
@@ -41,8 +60,13 @@ module Expr =
        Takes a state and an expression, and returns the value of the expression in 
        the given state.
     *)
-    let eval _ = failwith "Not implemented yet"
-
+    let rec eval state expr = match expr with
+    	| Const x -> x
+    	| Var z -> state z
+    	| Binop (op, left, right) ->
+    		let lhs = eval state left
+    		and rhs = eval state right in
+    		binop op lhs rhs
   end
                     
 (* Simple statements: syntax and sematics *)
@@ -65,7 +89,12 @@ module Stmt =
 
        Takes a configuration and a statement, and returns another configuration
     *)
-    let eval _ = failwith "Not implemented yet"
+    let rec eval config stmt = match config, stmt with
+    	| (s, z::i, o), Read x     -> (Expr.update x z s), i, o
+    	| (s, i, o), Write e       -> s, i, o @ [Expr.eval s e]
+    	| (s, i, o), Assign (x, e) -> (Expr.update x (Expr.eval s e) s), i, o
+    	| config, Seq (s1, s2)     -> eval (eval config s1) s2
+    	| _, Read _ -> failwith "Empty input stream"
                                                          
   end
 
