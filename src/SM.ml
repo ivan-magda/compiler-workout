@@ -57,9 +57,9 @@ let rec compileExpr expr = match expr with
 
      val run : prg -> int list -> int list
 
-   Takes an input stream, a program, and returns an output stream this program calculates
+   Takes a program, an input stream, and returns an output stream this program calculates
 *)
-let run p i = let (_, (_, _, o)) = eval ([], (Expr.empty, i, [])) p in o
+let run p i = let (_, (_, _, o)) = eval ([], (Language.Expr.empty, i, [])) p in o
 
 (* Stack machine compiler
 
@@ -73,4 +73,3 @@ let rec compile stmt = match stmt with
 	| Write e       -> compileExpr e @ [WRITE]
 	| Assign (z, e) -> compileExpr e @ [ST z]
 	| Seq (t1, t2)  -> compile t1 @ compile t2
-;;
