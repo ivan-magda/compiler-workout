@@ -20,8 +20,8 @@ type prg = insn list
 type config = int list * Syntax.Stmt.config
 
 let evalInsn config instr = match config, instr with
-	| (y::x::stack, config), 		 BINOP op -> ((Syntax.Expr.binop op x y)::stack, config)
-	| (stack, config), 				 CONST z  -> (z::stack, config)
+	| (y::x::stack, config),         BINOP op -> ((Syntax.Expr.binop op x y)::stack, config)
+	| (stack, config),               CONST z  -> (z::stack, config)
 	| (stack, (state, z::inp, out)), READ     -> (z::stack, (state, inp, out))
 	| (z::stack, (state, inp, out)), WRITE    -> (stack, (state, inp, out @ [z]))
 	| (stack, (state, inp, out)), 	 LD x     -> (state x)::stack, (state, inp, out)
@@ -59,7 +59,7 @@ let rec compileExpr = function
 	| Binop (op, lhs, rhs) -> compileExpr lhs @ compileExpr rhs @ [BINOP op]
 
 let rec compile = function
-    | Read z -> [READ; ST z]
+        | Read z -> [READ; ST z]
 	| Write e -> compileExpr e @ [WRITE]
 	| Assign (z, e) -> compileExpr e @ [ST z]
 	| Seq (z, e)  -> compile z @ compile e
