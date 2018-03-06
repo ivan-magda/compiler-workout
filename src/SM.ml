@@ -1,4 +1,6 @@
-open GT       
+open GT
+open Syntax.Expr
+open Syntax.Stmt       
        
 (* The type for the stack machine instructions *)
 @type insn =
@@ -17,13 +19,23 @@ type prg = insn list
  *)
 type config = int list * Syntax.Stmt.config
 
+let evalInsn config instr = match config, instr with
+	| (y::x::stack, config), 		 BINOP op -> ((Syntax.Expr.binop op x y)::stack, config)
+	| (stack, config), 				 CONST z  -> (z::stack, config)
+	| (stack, (state, z::inp, out)), READ     -> (z::stack, (state, inp, out))
+	| (z::stack, (state, inp, out)), WRITE    -> (stack, (state, inp, out @ [z]))
+	| (stack, (state, inp, out)), 	 LD x     -> (state x)::stack, (state, inp, out)
+	| (z::stack, (state, inp, out)), ST x     -> (stack, ((Syntax.Expr.update x z state), inp, out))
+
 (* Stack machine interpreter
 
      val eval : config -> prg -> config
 
    Takes a configuration and a program, and returns a configuration as a result
  *)                         
-let eval _ = failwith "Not yet implemented"
+let rec eval config prg = match config, prg with
+	| config, instr::prg -> eval (evalInsn config instr) prg
+	| config, [] -> config
 
 (* Top-level evaluation
 
