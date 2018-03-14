@@ -80,7 +80,46 @@ open SM
    Take an environment, a stack machine program, and returns a pair --- the updated environment and the list
    of x86 instructions
 *)
-let compile env code = failwith "Not yet implemented"
+let rec compile env code = 
+  let is_mem = function
+    | S _ -> true
+    | M _ -> true
+    | _ -> false
+  in
+  let mov = function
+    | (a, b) -> if is_mem a && is_mem b then [Mov (a, eax); Mov (eax, b)] else [Mov (a, b)]
+  in 
+  let binop = function
+    | (op, a, b) -> if is_mem a && is_mem b then [Mov (b, eax); Binop (op, a, eax); Mov (eax, b)] else [Binop (op, a, b)]
+  in 
+  let step env ins = match ins with
+    | ST x -> let s, env = (env#global x)#pop in env, mov (s, M (env#loc x))
+    | LD x -> let s, env = (env#global x)#allocate in env, mov (M (env#loc x), s)
+    | READ -> let s, env = env#allocate in env, [Call "Lread"; Mov (eax, s)]
+    | WRITE -> let s, env = env#pop in env, [Push s; Call "Lwrite"; Pop eax]
+    | CONST n -> let s, env = env#allocate in env, [Mov (L n, s)]
+    | BINOP op -> let sx, sy, env = env#pop2 in 
+                  let s, env = env#allocate in env, match op with
+      | "+" | "-" | "*" -> binop (op, sx, sy) @ mov (sy, s)
+      | "&&" | "!!" -> [Binop ("^", eax, eax); Binop ("^", edx, edx);
+                        Binop ("cmp", L 0, sx); Set ("nz", "%al"); 
+                        Binop ("cmp", L 0, sy); Set ("nz", "%dl"); 
+                        Binop (op, eax, edx); Mov (edx, s)]
+      | "<" | ">" | "<=" | ">=" | "==" | "!=" -> let suf = match op with
+        | "<" -> "l"
+        | ">" -> "g"
+        | "<=" -> "le"
+        | ">=" -> "ge"
+        | "==" -> "e"
+        | "!=" -> "ne"
+        in binop ("cmp", sx, sy) @ [Mov (L 0, eax); Set (suf, "%al"); Mov (eax, s)]
+      | "/" -> [Mov (sy, eax); Cltd; IDiv sx; Mov (eax, s)]
+      | "%" -> [Mov (sy, eax); Cltd; IDiv sx; Mov (edx, s)]
+  in match code with
+    | sm_ins::rest -> 
+      let new_env, ins = step env sm_ins in
+      let res_env, inss = compile new_env rest in res_env, ins @ inss
+    | [] -> env, []
 
 (* A set of strings *)           
 module S = Set.Make (String)
