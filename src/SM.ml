@@ -1,6 +1,6 @@
 open GT
-open Syntax.Expr
-open Syntax.Stmt       
+open Syntax
+open List
        
 (* The type for the stack machine instructions *)
 @type insn =
@@ -19,13 +19,15 @@ type prg = insn list
  *)
 type config = int list * Syntax.Stmt.config
 
-let evalInsn config instr = match config, instr with
-	| (y::x::stack, config),         BINOP op -> ((Syntax.Expr.binop op x y)::stack, config)
-	| (stack, config),               CONST z  -> (z::stack, config)
-	| (stack, (state, z::inp, out)), READ     -> (z::stack, (state, inp, out))
-	| (z::stack, (state, inp, out)), WRITE    -> (stack, (state, inp, out @ [z]))
-	| (stack, (state, inp, out)), 	 LD x     -> (state x)::stack, (state, inp, out)
-	| (z::stack, (state, inp, out)), ST x     -> (stack, ((Syntax.Expr.update x z state), inp, out))
+let evalOperation (stack, (state, i, o)) operation = match operation with
+    | BINOP operation -> let (x :: y :: rest) = stack in
+                         let binaryResult = Expr.eval state (Expr.Binop (operation, (Expr.Const y), (Expr.Const x))) in
+                         (binaryResult :: rest, (state, i, o))
+    | CONST x -> (x :: stack, (state, i, o))
+    | READ    -> let (x :: rest) = i in (x :: stack, (state, rest, o))
+    | WRITE   -> let (x :: rest) = stack in (rest, (state, i, x :: o))
+    | LD x    -> ((state x) :: stack, (state, i, o))
+    | ST x    -> let (h :: rest) = stack in (rest, (Expr.update x h state, i, o))
 
 (* Stack machine interpreter
 
@@ -33,9 +35,9 @@ let evalInsn config instr = match config, instr with
 
    Takes a configuration and a program, and returns a configuration as a result
  *)                         
-let rec eval config prg = match config, prg with
-	| config, instr::prg -> eval (evalInsn config instr) prg
-	| config, [] -> config
+let rec eval config program = match program with
+    | [] -> config
+    | l  -> let (operation :: rest) = l in eval (evalOperation config operation) rest
 
 (* Top-level evaluation
 
@@ -43,7 +45,7 @@ let rec eval config prg = match config, prg with
 
    Takes an input stream, a program, and returns an output stream this program calculates
 *)
-let run i p = let (_, (_, _, o)) = eval ([], (Syntax.Expr.empty, i, [])) p in o
+let run i p = let (_, (_, _, o)) = eval ([], (Expr.empty, i, [])) p in o
 
 (* Stack machine compiler
 
@@ -53,13 +55,13 @@ let run i p = let (_, (_, _, o)) = eval ([], (Syntax.Expr.empty, i, [])) p in o
    stack machine
  *)
 
-let rec compileExpr = function
-	| Const x -> [CONST x]
-	| Var z -> [LD z]
-	| Binop (op, lhs, rhs) -> compileExpr lhs @ compileExpr rhs @ [BINOP op]
+let rec compileExpression expression = match expression with
+    | Expr.Const c                 -> [CONST c]
+    | Expr.Var x                   -> [LD x]
+    | Expr.Binop (operation, l, r) -> (compileExpression l) @ (compileExpression r) @ [BINOP operation]
 
-let rec compile = function
-        | Read z -> [READ; ST z]
-	| Write e -> compileExpr e @ [WRITE]
-	| Assign (z, e) -> compileExpr e @ [ST z]
-	| Seq (z, e)  -> compile z @ compile e
+let rec compile statement = match statement with
+    | Stmt.Read x                 -> [READ; ST x]
+    | Stmt.Write expression       -> (compileExpression expression) @ [WRITE]
+    | Stmt.Assign (x, expression) -> (compileExpression expression) @ [ST x]
+    | Stmt.Seq (s, t)             -> (compile s) @ (compile t)
