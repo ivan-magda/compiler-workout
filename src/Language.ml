@@ -37,26 +37,6 @@ module Expr =
     *)
     let update x v s = fun y -> if x = y then v else s y
 
-    let to_func op =
-      let bti = function true -> 1 | _ -> 0 in
-      let itb b = b <> 0 in
-      let (|>) f g = fun x y -> f (g x y) in
-      match op with
-      | "+" -> (+)
-      | "-" -> (-)
-      | "*" -> ( * )
-      | "/" -> (/)
-      | "%" -> (mod)
-      | "<"  -> bti |> (<)
-      | "<=" -> bti |> (<=)
-      | ">"  -> bti |> (>)
-      | ">=" -> bti |> (>=)
-      | "==" -> bti |> (=)
-      | "!=" -> bti |> (<>)
-      | "&&" -> fun x y -> bti (itb x && itb y)
-      | "!!" -> fun x y -> bti (itb x || itb y)
-      | _ -> failwith (Printf.sprintf "Unknown binary operator %s" op)
-
     (* Expression evaluator
 
           val eval : state -> t -> int
@@ -64,10 +44,30 @@ module Expr =
        Takes a state and an expression, and returns the value of the expression in 
        the given state.
     *)                                                       
-    let eval st expr =
+    let to_func op =
+      let bti   = function true -> 1 | _ -> 0 in
+      let itb b = b <> 0 in
+      let (|>) f g   = fun x y -> f (g x y) in
+      match op with
+      | "+"  -> (+)
+      | "-"  -> (-)
+      | "*"  -> ( * )
+      | "/"  -> (/)
+      | "%"  -> (mod)
+      | "<"  -> bti |> (< )
+      | "<=" -> bti |> (<=)
+      | ">"  -> bti |> (> )
+      | ">=" -> bti |> (>=)
+      | "==" -> bti |> (= )
+      | "!=" -> bti |> (<>)
+      | "&&" -> fun x y -> bti (itb x && itb y)
+      | "!!" -> fun x y -> bti (itb x || itb y)
+      | _    -> failwith (Printf.sprintf "Unknown binary operator %s" op)    
+    
+    let rec eval st expr =      
       match expr with
       | Const n -> n
-      | Var x -> st x
+      | Var   x -> st x
       | Binop (op, x, y) -> to_func op (eval st x) (eval st y)
 
     (* Expression parser. You can use the following terminals:
@@ -124,34 +124,34 @@ module Stmt =
 
        Takes a configuration and a statement, and returns another configuration
     *)
-    let rec eval conf stmt =
+    let rec eval ((st, i, o) as conf) stmt =
       match stmt with
-      | Read    x          -> (match i with z::i' -> (Expr.update x z st, i', o) | _ -> failwith "Unexpected end of input.")
-      | Write   e          -> (st, i, o @ [Expr.eval st e]) 
+      | Read    x          -> (match i with z::i' -> (Expr.update x z st, i', o) | _ -> failwith "Unexpected end of input")
+      | Write   e          -> (st, i, o @ [Expr.eval st e])
       | Assign (x, e)      -> (Expr.update x (Expr.eval st e) st, i, o)
       | Seq    (s1, s2)    -> eval (eval conf s1) s2
       | Skip               -> conf
       | If     (e, s1, s2) -> if Expr.eval st e != 0 then eval conf s1 else eval conf s2
       | While  (e, s)      -> if Expr.eval st e != 0 then eval (eval conf s) stmt else conf
-      | Repeat (e, s)      -> let (st_, i_, o_) as conf_ = eval conf s in
+      | Repeat (e, s)      -> let (st_, i_, o_) as conf_ = eval conf s in 
                                 if Expr.eval st_ e == 0 then eval conf_ stmt else conf_
-                               
+
     (* Statement parser *)
     ostap (
       parse:
         s:stmt ";" ss:parse {Seq (s, ss)}
       | stmt;
       stmt:
-        %"read" "(" x:IDENT ")" {Read x}
+        %"read" "(" x:IDENT ")"          {Read x}
       | %"write" "(" e:!(Expr.parse) ")" {Write e}
       | %"skip" {Skip}
       | %"while" e:!(Expr.parse) %"do" t:parse %"od" {While (e, t)}
       | %"for" t1:parse "," e:!(Expr.parse) "," t2:parse %"do" t3:parse %"od" {Seq (t1, While (e, Seq (t3, t2)))}
       | %"repeat" t:parse %"until" e:!(Expr.parse) {Repeat (e, t)}
-      | %"if" e:!(Expr.parse) %"then" t:parse
-        elifs:(%"elif" !(Expr.parse) %"then" parse)*
+      | %"if" e:!(Expr.parse) %"then" t:parse 
+        elifs:(%"elif" !(Expr.parse) %"then" parse)* 
         elseb:(%"else" parse)? %"fi"
-        {
+        { 
           let elseBody = match elseb with
             | Some t -> t
             | None -> Skip
