@@ -77,7 +77,25 @@ module Expr =
                                                                                                                   
     *)
     ostap (                                      
-      parse: empty {failwith "Not yet implemented"}
+      parse:
+      !(Ostap.Util.expr 
+             (fun x -> x)
+         (Array.map (fun (a, s) -> a, 
+                           List.map (fun s -> ostap(- $(s)), (fun x y -> Binop (s, x, y))) s
+                    )
+             [|
+                `Lefta, ["!!"];
+                `Lefta, ["&&"];
+                `Nona , ["=="; "!="; "<="; "<"; ">="; ">"];
+                `Lefta, ["+" ; "-"];
+                `Lefta, ["*" ; "/"; "%"];
+             |]
+         )
+         primary);
+      primary:
+        n:DECIMAL {Const n}
+      | x:IDENT {Var x}
+      | -"(" parse -")"
     )
     
   end
