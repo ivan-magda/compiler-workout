@@ -37,6 +37,26 @@ module Expr =
     *)
     let update x v s = fun y -> if x = y then v else s y
 
+    let to_func op =
+      let bti = function true -> 1 | _ -> 0 in
+      let itb b = b <> 0 in
+      let (|>) f g = fun x y -> f (g x y) in
+      match op with
+      | "+" -> (+)
+      | "-" -> (-)
+      | "*" -> ( * )
+      | "/" -> (/)
+      | "%" -> (mod)
+      | "<"  -> bti |> (<)
+      | "<=" -> bti |> (<=)
+      | ">"  -> bti |> (>)
+      | ">=" -> bti |> (>=)
+      | "==" -> bti |> (=)
+      | "!=" -> bti |> (<>)
+      | "&&" -> fun x y -> bti (itb x && itb y)
+      | "!!" -> fun x y -> bti (itb x || itb y)
+      | _ -> failwith (Printf.sprintf "Unknown binary operator %s" op)
+
     (* Expression evaluator
 
           val eval : state -> t -> int
@@ -44,7 +64,11 @@ module Expr =
        Takes a state and an expression, and returns the value of the expression in 
        the given state.
     *)                                                       
-    let eval st expr = failwith "Not yet implemented"
+    let eval st expr =
+      match expr with
+      | Const n -> n
+      | Var x -> st x
+      | Binop (op, x, y) -> to_func op (eval st x) (eval st y)
 
     (* Expression parser. You can use the following terminals:
 
