@@ -7,7 +7,7 @@ open GT
 open Ostap
 open Combinators
 
-let default x opt = match opt with
+let optional x opt = match opt with
         | Some v -> v
         | None   -> x
                          
@@ -222,7 +222,7 @@ module Stmt =
           If (e, t, newElseBody)
         }
       | x:IDENT ":=" e:!(Expr.parse)    {Assign (x, e)}
-      | name:IDENT "(" params:(!(Util.list)[ostap (!(Expr.parse))])? ")" {Call (name, default [] params)}
+      | name:IDENT "(" params:(!(Util.list)[ostap (!(Expr.parse))])? ")" {Call (name, optional [] params)}
     )
       
   end
