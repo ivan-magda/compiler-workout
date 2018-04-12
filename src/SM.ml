@@ -30,8 +30,36 @@ type config = (prg * State.t) list * int list * Expr.config
 
    Takes an environment, a configuration and a program, and returns a configuration as a result. The
    environment is used to locate a label to jump to (via method env#labeled <label_name>)
-*)                                                  
-let rec eval env ((cstack, stack, ((st, i, o) as c)) as conf) prg = failwith "Not implemented"
+*)
+let rec eval env ((cstack, stack, ((st, i, o) as c)) as conf) = function
+  | [] -> conf
+  | insn :: prg' -> 
+    match insn with
+      | JMP s       -> eval env conf (env#labeled s)
+        | CJMP (f, s) -> let x::stack' = stack in 
+                     let predicate = match f with
+                        | "z"  -> (==) 0
+                      | "nz" -> (!=) 0
+                     in
+                     if predicate x then eval env (cstack, stack', c) (env#labeled s) else eval env (cstack, stack', c) prg'
+            | CALL f      -> eval env ((prg', st)::cstack, stack, c) (env#labeled f)
+            | END         -> let (p, st')::cstack' = cstack in 
+                             eval env (cstack', stack, (State.leave st st', i, o)) p
+          | _ -> eval env
+         (match insn with
+          | BINOP op     -> let y::x::stack' = stack in (cstack, Expr.to_func op x y :: stack', c)
+          | READ         -> let z::i'        = i     in (cstack, z::stack, (st, i', o))
+          | WRITE        -> let z::stack'    = stack in (cstack, stack', (st, i, o @ [z]))
+          | CONST i      -> (cstack, i::stack, c)
+          | LD x         -> (cstack, State.eval st x :: stack, c)
+          | ST x         -> let z::stack'    = stack in (cstack, stack', (State.update x z st, i, o))
+          | LABEL s      -> conf
+          | BEGIN (p, l) -> let enter_st = State.enter st (p @ l) in
+                            let (st', stack') = List.fold_right (
+                                fun p (st, x::stack') -> (State.update p x st, stack')  
+                                ) p (enter_st, stack) in
+                            (cstack, stack', (st', i, o))
+         ) prg'
 
 (* Top-level evaluation
 
@@ -57,4 +85,50 @@ let run p i =
    Takes a program in the source language and returns an equivalent program for the
    stack machine
 *)
-let compile (defs, p) = failwith "Not implemented"
+class env =
+  object (self)
+    val mutable label = 0
+    method next_label = let last_label = label in
+      label <- label + 1; Printf.sprintf "L%d" last_label
+  end
+
+let rec compile' env p =
+  let rec expr = function
+  | Expr.Var   x          -> [LD x]
+  | Expr.Const n          -> [CONST n]
+  | Expr.Binop (op, x, y) -> expr x @ expr y @ [BINOP op]
+  | Expr.Call (f, params) -> List.concat (List.map expr params) @ [CALL f]
+  in
+  match p with
+  | Stmt.Seq (s1, s2)   -> compile' env s1 @ compile' env s2
+  | Stmt.Read x         -> [READ; ST x]
+  | Stmt.Write e        -> expr e @ [WRITE]
+  | Stmt.Assign (x, e)  -> expr e @ [ST x]
+  | Stmt.Skip           -> []
+  | Stmt.If (e, s1, s2) -> let fLabel = env#next_label in
+                 let eLabel = env#next_label in
+                 expr e @ [CJMP ("z", fLabel)] @ 
+                 compile' env s1 @ [JMP eLabel; LABEL fLabel] @ 
+                 compile' env s2 @ [LABEL eLabel]
+  | Stmt.While (e, s)   -> let loopLabel = env#next_label in
+                 let endLabel  = env#next_label in
+                 [LABEL loopLabel] @ expr e @ [CJMP ("z", endLabel)] @
+                 compile' env s @ [JMP loopLabel; LABEL endLabel]
+  | Stmt.Repeat (s, e)  -> let startLabel = env#next_label in
+                 [LABEL startLabel] @ compile' env s @ expr e @ [CJMP ("z", startLabel)]
+  | Stmt.Call (f, p)    -> List.concat (List.map expr p) @ [CALL f]
+  | Stmt.Return r       -> (match r with | None -> [] | Some v -> expr v) @ [END]
+
+let compile_procedure env (name, (params, locals, body)) =
+    [LABEL name; BEGIN (params, locals)] @ compile' env body @ [END] 
+
+(* Stack machine compiler
+
+     val compile : Language.Stmt.t -> prg
+
+   Takes a program in the source language and returns an equivalent program for the
+   stack machine
+*)
+let compile (defs, p) = let env = new env in
+    let end_label = env#next_label in
+    [JMP end_label] @ List.concat (List.map (compile_procedure env) defs) @ [LABEL end_label] @ compile' env p
