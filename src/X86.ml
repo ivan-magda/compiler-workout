@@ -98,7 +98,7 @@ let compile env code =
   | "!=" -> "ne"
   | ">=" -> "ge"
   | ">"  -> "g"
-  | _    -> failwith "unknown operator"	
+  | _    -> failwith "unknown operator" 
   in
   let rec compile' env scode = failwith "Not implemented" in
   compile' env code
@@ -106,8 +106,10 @@ let compile env code =
 (* A set of strings *)           
 module S = Set.Make (String)
 
+let rec list_init i n f = if i >= n then [] else (f i) :: (list_init (i + 1) n f)
+
 (* Environment implementation *)
-let make_assoc l = List.combine l (List.init (List.length l) (fun x -> x))
+let make_assoc l = List.combine l (list_init 0 (List.length l) (fun x -> x))
                      
 class env =
   object (self)
@@ -127,14 +129,14 @@ class env =
     (* allocates a fresh position on a symbolic stack *)
     method allocate =    
       let x, n =
-	let rec allocate' = function
-	| []                            -> ebx     , 0
-	| (S n)::_                      -> S (n+1) , n+2
-	| (R n)::_ when n < num_of_regs -> R (n+1) , stack_slots
+  let rec allocate' = function
+  | []                            -> ebx     , 0
+  | (S n)::_                      -> S (n+1) , n+2
+  | (R n)::_ when n < num_of_regs -> R (n+1) , stack_slots
         | (M _)::s                      -> allocate' s
-	| _                             -> S 0     , 1
-	in
-	allocate' stack
+  | _                             -> S 0     , 1
+  in
+  allocate' stack
       in
       x, {< stack_slots = max n stack_slots; stack = x::stack >}
 
