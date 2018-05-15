@@ -49,7 +49,8 @@ let main =
 	let output = 
 	  if interpret 
 	  then Language.eval prog input 
-	  else SM.run (SM.compile prog) input
+	  else let compiledSM = SM.compile prog in
+	  SM.run compiledSM input
 	in
 	List.iter (fun i -> Printf.printf "%d\n" i) output
     | `Fail er -> Printf.eprintf "Syntax error: %s\n" er
